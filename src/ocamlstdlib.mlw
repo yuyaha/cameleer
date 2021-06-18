@@ -77,10 +77,6 @@ module Stdlib
 
     function ([]) (a: my_array 'a) (i: int) : 'a = Seq.([]) a.elts i
 
-    (* val ghost function set (a: my_array 'a) (i: int) (v: 'a): my_array 'a *)
-    (*   ensures { result.length = a.length } *)
-    (*   ensures { result.elts = Seq.set a.elts i v } *)
-
     val get (a: my_array 'a) (i: int) : 'a
       requires { [@expl:index in array bounds] 0 <= i < length a }
       ensures  { result = a[i] }
@@ -220,11 +216,15 @@ module Stdlib
     val pop (q: t 'a) : 'a
       writes  { q }
       raises  { Empty -> q.view = empty /\ q.view = (old q).view }
-      ensures { (old q).view == cons result q.view }
+      ensures { (old q).view = cons result q.view }
 
     val add (x: 'a) (q: t 'a) : unit
       writes  { q }
       ensures { q.view = snoc (old q).view x }
+
+    val copy (q : t 'a) : t 'a 
+      ensures { result.view == q.view }
+    
 
   end
 
@@ -478,7 +478,10 @@ module Queue
   val add (x: 'a) (q: t 'a) : unit
     writes  { q }
     ensures { q.view = snoc (old q).view x }
-
+    
+  val copy (q : t 'a) : t 'a 
+    ensures { result.view == q.view }
+    
 end
 
 module Seq
@@ -491,6 +494,12 @@ end
 module SeqPermut
 
   use export seq.Permut
+
+end
+
+module SeqOfList
+
+  use export seq.OfList
 
 end
 
