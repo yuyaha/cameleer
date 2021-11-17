@@ -78,6 +78,8 @@ module Stdlib
 
     function ([]) (a: my_array 'a) (i: int) : 'a = Seq.([]) a.elts i
 
+    function get (a: my_array 'a) (i: int) : 'a = a[i]
+
     val get (a: my_array 'a) (i: int) : 'a
       requires { [@expl:index in array bounds] 0 <= i < length a }
       ensures  { result = a[i] }
@@ -504,6 +506,8 @@ module Array
 
     function ([]) (a: my_array 'a) (i: int) : 'a = Seq.([]) a.elts i
 
+    function get (a: my_array 'a) (i: int) : 'a = a[i]
+
     val get (a: my_array 'a) (i: int) : 'a
       requires { [@expl:index in array bounds] 0 <= i < length a }
       ensures  { result = a[i] }
@@ -607,6 +611,18 @@ end
 module SeqPermut
 
   use export seq.Permut
+
+end
+
+module ListOfSeq
+
+  use export seq.ToList
+
+end
+
+module FsetSum
+
+  use export set.FsetSum
 
 end
 
