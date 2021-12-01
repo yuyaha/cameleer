@@ -637,18 +637,6 @@ module SeqOfList
 
 end
 
-module ListOfSeq
-
-  use export seq.ToList
-
-end
-
-module FsetSum
-
-  use export set.FsetSum
-
-end
-
 module Permut
 
   use export list.Permut
