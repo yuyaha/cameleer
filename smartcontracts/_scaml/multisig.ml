@@ -51,6 +51,7 @@ let[@entry] main parameter storage =
         | key :: keys, Some sig_ :: sigs ->
             (* Checks signatures, fails if invalid *)
             assert (Crypto.check_signature key sig_ signature_target) ;
+            (*  *)
             Left (nsigs +^ Nat 1, keys, sigs)
         | key :: keys, None :: sigs -> Left (nsigs, keys, sigs)
         | _ ->

@@ -204,6 +204,13 @@ module Stdlib
     val list_exists (p: 'a -> bool) (l: list 'a) : bool
       ensures { result <-> exists x. mem x l /\ p x }
 
+    let rec function map (f: 'a -> 'b) (l: list 'a) : list 'b
+      variant { l }
+    = match l with
+      | Nil -> Nil
+      | Cons a ax -> Cons (f a) (map f ax)
+      end
+
     let rec function assoc_opt (eq: 'a -> 'a -> bool) (x: 'a) (l: list ('a, 'b)) : option 'b
       variant { l }
     = match l with
@@ -228,6 +235,11 @@ module Stdlib
     let function lt (n1: nat) (n2: nat) : bool =
         match n1, n2 with
         | Nat n1, Nat n2 -> n1 < n2
+    end
+
+    let function le (n1: nat) (n2: nat) : bool =
+        match n1, n2 with
+        | Nat n1, Nat n2 -> n1 <= n2
     end
 
     let function add (n1: nat) (n2: nat) : nat =
@@ -568,19 +580,21 @@ module Stdlib
 
   end
 
+  type source = File string | Code string
+
   type rep =
     | RepString
     | RepNat
     | RepInt
-    (*| RepBytes*)
+    | RepBytes
     | RepBool
     | RepUnit
     | RepList rep
     (* XXX fields and annots must be moved to t *)
-    | RepPair (list rep)
+    | RepPair (rep, rep)
     (*| TyPairN of (string option * t) list (* length > 2 *) (* XXX We now need pair compaction somewhere else *)*)
     | RepOption rep
-    | RepOr (list rep)
+    | RepOr (rep, rep)
     | RepSet rep (* comparable *)
     | RepMap rep (* comparable *) rep
     (*| RepBigMap (rep (* comparable *), rep)*)
@@ -604,20 +618,20 @@ module Stdlib
 
   type param =
     | ParamString string
-    | ParamNat int
+    | ParamNat nat
     | ParamInt int
-    (*| ParamBytes *)
+    | ParamBytes bytes
     | ParamBool bool
     | ParamUnit unit
     | ParamList (list param)
     (* XXX fields and annots must be moved to t *)
-    | ParamPair (list param)
+    | ParamPair (param, param)
     | ParamOption (option param)
     | ParamOr param
     | ParamSet (set param) (* comparable *)
     | ParamMap (map param param)
     (*| ParamBigMap *)
-    | ParamMutez int
+    | ParamMutez tz
     | ParamKeyHash key_hash
     | ParamTimestamp timestamp
     | ParamAddress address
@@ -635,9 +649,13 @@ module Stdlib
     | ParamSapling_transaction rep (* from 008 *)
     | ParamTicket rep*)
 
-  with contract = Self rep | Of_address rep address
+  with contract = Self rep | Of_address rep address | Implicit_account key_hash
 
-  with operation = Transfer_tokens param tz contract
+  with operation =
+    | Transfer_tokens param tz contract
+    | Set_delegate (option key_hash)
+    | Originate source (option key_hash) tz param
+
   with operations = list operation
 
   scope Contract
@@ -647,17 +665,19 @@ module Stdlib
     let function self (r:rep) : contract = Self r
 
     let function contract (r:rep) (addr:address) : option contract =
-      returns { c -> match c with
-                    | None -> true
-                    | Some (Self r') -> r = r'
-                    | Some (Of_address r' addr') -> r = r' && addr = addr' end }
+      returns { ct -> match ct with
+                      | None -> true
+                      | Some (Of_address r' addr') -> r = r' && addr = addr'
+                      | _ -> false end }
       if any bool then Some (Of_address r addr) else None
 
+    let function implicit_account (kh: key_hash) : contract = Implicit_account kh
+
     let address (c:contract) : address =
-      raises { Fail -> match c with Self _ -> true | Of_address _ _ -> false end}
+      raises { Fail -> match c with Of_address _ _ -> false | _ -> true end}
       match c with
-      | Self _ -> failwith ()
       | Of_address _ a -> a
+      | _ -> failwith ()
       end
 
   end
@@ -668,7 +688,7 @@ module Stdlib
     | RepString, ParamString _ -> true
     | RepNat, ParamNat _ -> true
     | RepInt, ParamInt _ -> true
-    (*| RepBytes*)
+    | RepBytes, ParamBytes _ -> true
     | RepBool, ParamBool _ -> true
     | RepUnit, ParamUnit _ -> true
     | RepList r0, ParamList p0 ->
@@ -677,13 +697,12 @@ module Stdlib
       | Cons x xs -> typecheck r0 x && typecheck (RepList r0) (ParamList xs)
       end
     (* XXX fields and annots must be moved to t *)
-    | RepPair (Cons r0 (Cons r1 Nil)), ParamPair (Cons p0 (Cons p1 Nil)) ->
-      typecheck r0 p0 && typecheck r1 p1
+    | RepPair (r0, r1), ParamPair (p0, p1) -> typecheck r0 p0 && typecheck r1 p1
     (*| TyPairN of (string option * t) list (* length > 2 *) (* XXX We now need pair compaction somewhere else *)*)
     | RepOption _, ParamOption (None) -> true
     | RepOption r0, ParamOption (Some p0) -> typecheck r0 p0
-    | RepOr (Cons r rs), ParamOr p ->
-      typecheck r p || typecheck (RepOr rs) (ParamOr p)
+    | RepOr (r0, r1), ParamOr p ->
+      typecheck r0 p || typecheck r1 p
     | RepSet r0 (* comparable *), ParamSet (Set p0) ->
       match p0 with
       | Nil -> true
@@ -720,8 +739,13 @@ module Stdlib
     type t = operation
 
     let function transfer_tokens (p:param) (t:tz) (c:contract) : operation
-      requires { match c with Self r -> typecheck r p | Of_address r _ -> typecheck r p end }
+      requires {  match c with
+                  | Self r -> typecheck r p
+                  | Of_address r _ -> typecheck r p
+                  | Implicit_account _ -> typecheck RepUnit p end }
     = Transfer_tokens p t c
+
+    let function set_delegate (kho: option key_hash) = Set_delegate kho
 
   end
 
@@ -761,7 +785,21 @@ module Stdlib
 
   scope Obj
 
-  let function pack (a:'a) : bytes = Bytes ""
+    val function pack (p:param) : bytes
+
+    val function unpack (bs:bytes) : option param
+      returns { po -> match po with None -> true | Some p -> bs = pack p end }
+
+    lemma
+
+  end
+
+  scope Crypto
+
+    val function create_signature (k:key) (bs:bytes) : signature
+
+    val function check_signature (k: key) (s: signature) (bs: bytes) : bool
+
 
   end
 
