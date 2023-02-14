@@ -59,7 +59,7 @@ let[@entry] main parameter storage =
                than keys. Not all signatures must be present, but
                they should be marked as absent using the option type.
             *)
-            assert false)
+            assert false ;)
       (Nat 0, storage.keys, parameter.sigs)
   in
   (* Assert that the threshold is less than or equal to the
@@ -87,3 +87,25 @@ let[@entry] main parameter storage =
   | Change_keys {threshold; keys} ->
       (* Change set of signatures *)
       [], {storage with threshold; keys}
+
+let parameter =
+  { payload=  { counter= Nat 42
+              ; action= Transfer { amount= Tz 1.0
+                                ; dest= Contract.implicit_account (Key_hash "tz1KqTpEZ7Yob7QbPE4Hy4Wo8fHG8LhKxZSx")
+                                }
+              }
+
+  ; sigs= [ Some (Signature "edsigtteMcYkviZ3rTaM6N7DWvgsyoTmEHGo91Q63qNJNYXFhTwWzmytanUj8G44aEZ8QDJt3myyxjuVwvRMikSJauZ96AvshWJ"); None ]
+  }
+
+let storage =
+  { stored_counter= Nat 42
+  ; threshold= Nat 1
+  ; keys= [ Key "edpkuBknW28nW72KG6RoHtYW7p12T6GKc7nAbwYX5m8Wd9sDVC9yav" (* bootstrap1 *)
+          ; Key "edpktzNbDAUjUk697W7gYg2CRuBQjyPxbEg8dLccYYwKSKvkPvjtV9" (* bootstrap2 *)
+          ]
+  }
+
+let [@entry] test () () =
+  let ops, _ = main parameter storage in
+  ops, ()

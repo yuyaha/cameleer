@@ -1,5 +1,4 @@
-
-let main env () () =
+let [@entry] main env () () =
   let amount = Global.get_amount env in
   let ops =
     if Tz.eq amount (Tz 0) then []

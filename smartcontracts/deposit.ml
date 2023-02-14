@@ -1,4 +1,3 @@
-
 type parameter =
   | Left of tz
   | Right of tz
@@ -18,15 +17,19 @@ let [@entry] main env parameter storage =
 
 (*@ ops, stg = main env param storage
       ensures
-          let sco = Contract.contract RepUnit (Global.get_sender env) in
-          match param, sco with
-          | Left _, _ ->  ops = []
-          | Right amount, Some sc ->
-              Address.eq (Global.get_sender env) storage -> ops = (Operation.transfer_tokens (ParamUnit ()) amount sc) :: []
-          | Right _, None -> false
+          match param with
+          | Left _->  ops = []
+          | Right amount ->
+            let sender = Global.get_sender env in
+            if Address.eq sender storage then
+              match Contract.contract RepUnit sender with
+              | Some source_contract ->
+                ops = Operation.transfer_tokens (ParamUnit ()) amount source_contract :: []
+              | None -> true
+            else true
       raises
           Invalid_argument _ ->
-            match (Contract.contract RepUnit (Global.get_sender env)) with
+            match Contract.contract RepUnit (Global.get_sender env) with
             | None -> true
             | Some _ -> false
       raises

@@ -175,6 +175,7 @@ module Stdlib
     use export list.List
     use export list.Length
     use export list.Mem
+    use export list.Nth
     use export list.NumOcc
     use import list.Append    as A
     use import list.Reverse   as R
@@ -284,14 +285,13 @@ module Stdlib
     use export option.Option
 
     let function value (o: option 'a) (a: 'a)
-      ensures { result = match o with None -> a | Some a -> a end }
     = match o with
       | None -> a
       | Some a -> a
       end
 
     let get (o: option 'a) : 'a
-      ensures { match o with None -> false | Some a -> result = a end }
+      returns { r -> match o with None -> false | Some a -> r = a end }
       raises { Invalid_argument _ -> is_none o }
     = match o with
       | None -> invalid_arg "Option.get"
@@ -299,7 +299,6 @@ module Stdlib
       end
 
     let function map (f: 'a -> 'b) (o: option 'a)
-      ensures { match o, result with None, None -> true | Some a, Some b -> f a = b | _, _ -> false end }
     = match o with
       | None -> None
       | Some a -> Some (f a)
@@ -340,10 +339,8 @@ module Stdlib
     returns { _ -> false }
   = raise Fail
 
-  let myassert (b: bool)
-    raises { Fail -> not b }
-    returns { _ -> b }
-  = if b then () else failwith ()
+  (* implement exception ASSERTFAILURE *)
+  exception Assert_failure
 
   (* implement SET module *)
   type set 'a = Set (list 'a)
@@ -471,7 +468,7 @@ module Stdlib
   scope Loop
 
     let rec function left (f: 'a -> sum 'a 'b) (a: 'a)
-      variant { a }
+      variant { match f a with Left _ -> true | Right _ -> false end }
     = match f a with Left a -> left f a | Right b -> b end
 
   end
@@ -564,7 +561,7 @@ module Stdlib
 
   end
 
-  type key = string
+  type key = Key string
 
   scope Key
 
@@ -627,7 +624,7 @@ module Stdlib
     (* XXX fields and annots must be moved to t *)
     | ParamPair (param, param)
     | ParamOption (option param)
-    | ParamOr param
+    | ParamOr (sum param param)
     | ParamSet (set param) (* comparable *)
     | ParamMap (map param param)
     (*| ParamBigMap *)
@@ -673,12 +670,7 @@ module Stdlib
 
     let function implicit_account (kh: key_hash) : contract = Implicit_account kh
 
-    let address (c:contract) : address =
-      raises { Fail -> match c with Of_address _ _ -> false | _ -> true end}
-      match c with
-      | Of_address _ a -> a
-      | _ -> failwith ()
-      end
+    val function address (c:contract) : address
 
   end
 
@@ -701,8 +693,8 @@ module Stdlib
     (*| TyPairN of (string option * t) list (* length > 2 *) (* XXX We now need pair compaction somewhere else *)*)
     | RepOption _, ParamOption (None) -> true
     | RepOption r0, ParamOption (Some p0) -> typecheck r0 p0
-    | RepOr (r0, r1), ParamOr p ->
-      typecheck r0 p || typecheck r1 p
+    | RepOr (r, _), ParamOr (Left p) -> typecheck r p
+    | RepOr (_, r), ParamOr (Right p) -> typecheck r p
     | RepSet r0 (* comparable *), ParamSet (Set p0) ->
       match p0 with
       | Nil -> true
@@ -739,7 +731,7 @@ module Stdlib
     type t = operation
 
     let function transfer_tokens (p:param) (t:tz) (c:contract) : operation
-      requires {  match c with
+      requires  {  match c with
                   | Self r -> typecheck r p
                   | Of_address r _ -> typecheck r p
                   | Implicit_account _ -> typecheck RepUnit p end }
@@ -754,16 +746,16 @@ module Stdlib
     type t = { env_now : timestamp; env_amount : tz; env_source : address; env_sender : address }
 
     let now (env: t) : timestamp =
-      env_now env
+      env.env_now
 
     let amount (env: t) : tz =
-      env_amount env
+      env.env_amount
 
     let source (env: t) : address =
-      env_source env
+      env.env_source
 
     let sender (env: t) : address =
-      env_sender env
+      env.env_sender
 
   end
 
@@ -788,18 +780,21 @@ module Stdlib
     val function pack (p:param) : bytes
 
     val function unpack (bs:bytes) : option param
-      returns { po -> match po with None -> true | Some p -> bs = pack p end }
 
-    lemma
+    axiom id_pack : forall p. not (is_none (unpack (pack p))) -> match unpack (pack p) with Some p' -> p = p' | None -> false end
+
+    axiom id_unpack : forall bs. not (is_none (unpack bs)) -> match unpack bs with Some p -> bs = pack p | None -> false end
 
   end
 
   scope Crypto
 
+    val function create_pkey (k:key) : key
+
     val function create_signature (k:key) (bs:bytes) : signature
 
-    val function check_signature (k: key) (s: signature) (bs: bytes) : bool
-
+    val function check_signature (pk: key) (s: signature) (bs: bytes) : bool
+      ensures { result <-> exists k. create_pkey k = pk && create_signature k bs = s }
 
   end
 

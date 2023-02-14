@@ -32,6 +32,8 @@ let mk_info () =
 	Odecl.add_info info "ParamPair" 1;
 	Odecl.add_info info "ParamOr" 1;
 	Odecl.add_info info "Left" 1;
+  Odecl.add_info info "Ok" 1;
+  Odecl.add_info info "Error" 1;
   info
 
 (* let (* rec *) translation_for_scaml typed_structure =

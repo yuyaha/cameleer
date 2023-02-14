@@ -1,4 +1,3 @@
-
 type config =
   { title          : string
   ; beginning_time : timestamp
@@ -25,19 +24,19 @@ let vote (env : Env.t) (name : string) (storage : storage) =
   let now = Global.get_now env in
 
   (*if (Timestamp.le storage.config.beginning_time now && Timestamp.lt now storage.config.finish_time) then () else failwith (); *)
-  myassert (Timestamp.le storage.config.beginning_time now && Timestamp.lt now storage.config.finish_time);
+  if (Timestamp.le storage.config.beginning_time now && Timestamp.lt now storage.config.finish_time) then () else raise Assert_failure;
 
   let addr = Global.get_source env in
 
-  if not (Set.mem addr storage.voters) then () else failwith ();
+  if (Set.mem addr storage.voters) then raise Assert_failure else ();
 
   let x = match Map.get String.eq name storage.candidates with
     | Some i -> i
     | None -> 0
   in
   ([] : operation list),
-  { config = storage.config
-  ; candidates = Map.update String.eq String.lt name (Some (x + 1)) storage.candidates
+  { storage with
+    candidates = Map.update String.eq String.lt name (Some (x + 1)) storage.candidates
   ; voters = Set.update Address.eq Address.lt addr true storage.voters
   }
 (*@ ops, stg = vote env name storage
@@ -55,11 +54,13 @@ let vote (env : Env.t) (name : string) (storage : storage) =
           ; voters     = Set.update Address.eq Address.lt addr true storage.voters
         }
     raises
-      Fail ->
-      let now = Global.get_now env in
-      not ( Timestamp.le storage.config.beginning_time now &&
-            Timestamp.lt now storage.config.finish_time &&
-            not Set.mem (Global.get_source env) storage.voters ) *)
+      Assert_failure ->
+        let now = Global.get_now env in
+        not ( Timestamp.le storage.config.beginning_time now &&
+              Timestamp.lt now storage.config.finish_time &&
+              not Set.mem (Global.get_source env) storage.voters ) *)
+
+(*
 
 let [@logic] pvote (env : Env.t) (name : string) (storage : storage) = vote env name storage
 (*@ ops, stg = pvote env name storage
@@ -78,7 +79,7 @@ let [@logic] pvote (env : Env.t) (name : string) (storage : storage) = vote env 
           ; voters     = Set.update Address.eq Address.lt addr true storage.voters
         }
     raises
-      Fail -> false *)
+      Assert_failure -> false *)
 
 let main (env : Env.t) (action : action) (storage : storage) = match action with
   | Vote name -> vote env name storage
@@ -95,11 +96,11 @@ let main (env : Env.t) (action : action) (storage : storage) = match action with
         | Init config -> ([], init config)
       in ops = o && stg = s
     raises
-      Fail ->
-      let now = Global.get_now env in
-      not ( Timestamp.le storage.config.beginning_time now &&
-            Timestamp.lt now storage.config.finish_time &&
-            not Set.mem (Global.get_source env) storage.voters ) *)
+      Assert_failure ->
+        let now = Global.get_now env in
+        not ( Timestamp.le storage.config.beginning_time now &&
+              Timestamp.lt now storage.config.finish_time &&
+              not Set.mem (Global.get_source env) storage.voters ) *)
 
 let [@logic] pmain (env : Env.t) (action : action) (storage : storage) = main env action storage
 (*@ ops, stg = pmain env action storage
@@ -115,7 +116,7 @@ let [@logic] pmain (env : Env.t) (action : action) (storage : storage) = main en
         | Init config -> ([], init config)
       in ops = o && stg = s
     raises
-      Fail -> false *)
+      Assert_failure -> false *)
 
 (* Just for test.  For real voting dApp, this function is not required *)
 (* XXX optimized out! *)
@@ -152,15 +153,15 @@ let [@entry] test (env : Env.t) () () =
         let _, s = pmain env (Init conf) s in
         let o, _ = pmain env (Vote "hello") s in o
     raises
-      Fail ->
-      let conf =
-        { title="test"
-        ; beginning_time= Timestamp "2019-09-11T08:30:23Z"
-        ; finish_time= Timestamp "2219-09-11T08:30:23Z"
-        }
-      in
-      let storage = init conf in
-      let now = Global.get_now env in
-      not ( Timestamp.le storage.config.beginning_time now &&
-            Timestamp.lt now storage.config.finish_time &&
-            not Set.mem (Global.get_source env) storage.voters ) *)
+      Assert_failure ->
+        let conf =
+          { title="test"
+          ; beginning_time= Timestamp "2019-09-11T08:30:23Z"
+          ; finish_time= Timestamp "2219-09-11T08:30:23Z"
+          }
+        in
+        let storage = init conf in
+        let now = Global.get_now env in
+        not ( Timestamp.le storage.config.beginning_time now &&
+              Timestamp.lt now storage.config.finish_time &&
+              not Set.mem (Global.get_source env) storage.voters ) *)*)
